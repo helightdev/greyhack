@@ -1,0 +1,78 @@
+get_exploits = function()
+	return get_shell.host_computer.File(current_path + "/exploits.txt").get_content
+end function
+
+save_exploits = function(content)
+	get_shell.host_computer.File(current_path + "/exploits.txt").set_content(content)
+end function
+
+append_exploit = function(lib, type, memory, address)
+	exploits = get_exploits()
+	exploits = exploits + char(10) + lib.lib_name + " " + lib.version + " " + type + " " + memory + " " + array
+	save_exploits(exploits)
+end function
+
+iterate_exploits = function()
+	exploits = get_exploits()
+	entries = exploits.split(char(10))
+	list = []
+	for entry in entries
+		data = entry.split(" ")
+		list.push(data)
+	end for
+	return list
+end function
+
+if params.len != 2 or params[0] == "-h" or params[0] == "--help" then exit("<b>Usage: "+program_path.split("/")[-1]+" [ip_address] [port]</b>")
+metaxploit = include_lib("/lib/metaxploit.so")
+if not metaxploit then
+    metaxploit = include_lib(current_path + "/metaxploit.so")
+end if
+if not metaxploit then exit("Error: Can't find metaxploit library in the /lib path or the current folder")
+address = params[0]
+port = params[1].to_int
+net_session = metaxploit.net_use( address, port )
+if not net_session then exit("Error: can't connect to net session")
+metaLib = net_session.dump_lib
+print(address + ":" + port + " is running " + metaLib.lib_name + " on version " + metaLib.version)
+
+print("Please select the operation you want to perform.")
+print("Possible values: [try, list, shell]")
+operation = user_input("Operation: ")
+
+if operation == "try" then
+	memory = user_input("Address: ")
+	array = user_input("Array: ")
+	result = metaLib.overflow(memory, array)
+	if (typeof(result) == "shell") then
+		print("Found a shell exploit")
+		save = user_input("Save? (y/n): ")
+		if save == "y" then
+			append_exploit(metaLib, "shell", memory, array)
+			print("Saved!")
+		end if
+	else
+		print("Found an exploit of type " + typeof(result))
+	end if
+else if operation == "list" then
+	for data in iterate_exploits()
+		print(data[2] + " for " + data[0] + ":" + data[1] + " | " + data[3] + " "+ data[4])
+	end for
+else if operation == "shell" then
+	print("")
+	for data in iterate_exploits()
+		if (data[2] == "shell" and data[0] == metaLib.lib_name and data[1] == metaLib.version) then
+			result = metaLib.overflow(data[3], data[4])
+			if not result then
+				print(data[4] + "@" + data[3] + " didn't work")
+				continue
+			end if
+			if typeof(result) != "shell" then
+				print(data[4] + "@" + data[3] + " work but isn't a shell")
+				continue
+			end if
+			print(data[4] + "@" + data[3] + " worked! Connecting shell...")
+			result.start_terminal()
+		end if
+	end for
+end if
