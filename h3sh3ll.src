@@ -50,7 +50,7 @@ metaLib = net_session.dump_lib
 print(address + ":" + port + " is running " + metaLib.lib_name + " on version " + metaLib.version)
 
 print("Please select the operation you want to perform.")
-print("Possible values: [try, list, shell]")
+print("Possible values: [try, list(-all), shell, select]")
 operation = user_input("Operation: ")
 
 if operation == "try" then
