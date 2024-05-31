@@ -12,26 +12,39 @@ append_exploit = function(lib, type, memory, address)
 	save_exploits(exploits)
 end function
 
-iterate_exploits = function()
+iterate_exploits = function(lib, type)
 	exploits = get_exploits()
 	entries = exploits.split(char(10))
 	list = []
 	for entry in entries
 		data = entry.split(" ")
+		if lib then
+			if lib.lib_name != data[0] or lib.version != data[1] then continue
+		end if
+		if type then
+			if type != data[2] then continue
+		end if
 		list.push(data)
 	end for
 	return list
 end function
 
-if params.len != 2 or params[0] == "-h" or params[0] == "--help" then exit("<b>Usage: "+program_path.split("/")[-1]+" [ip_address] [port]</b>")
+if params.len < 1 or params[0] == "-h" or params[0] == "--help" then exit("<b>Usage: "+program_path.split("/")[-1]+" [ip_address] [?port]</b>")
 metaxploit = include_lib("/lib/metaxploit.so")
 if not metaxploit then
     metaxploit = include_lib(current_path + "/metaxploit.so")
 end if
 if not metaxploit then exit("Error: Can't find metaxploit library in the /lib path or the current folder")
 address = params[0]
-port = params[1].to_int
-net_session = metaxploit.net_use( address, port )
+
+if params.len == 2 then
+	port = params[1].to_int
+	net_session = metaxploit.net_use(address, port)
+else if params.len == 1 then
+	port = 0
+	net_session = metaxploit.net_use(address)
+end if
+
 if not net_session then exit("Error: can't connect to net session")
 metaLib = net_session.dump_lib
 print(address + ":" + port + " is running " + metaLib.lib_name + " on version " + metaLib.version)
@@ -53,14 +66,24 @@ if operation == "try" then
 		end if
 	else
 		print("Found an exploit of type " + typeof(result))
+		save = user_input("Save? (y/n): ")
+		if save != "y" then exit()
+		type = user_input("Exploit Type: ")
+		append_exploit(metaLib, type, memory, array)
 	end if
-else if operation == "list" then
-	for data in iterate_exploits()
-		print(data[2] + " for " + data[0] + ":" + data[1] + " | " + data[3] + " "+ data[4])
+else if operation == "list" or operation == "list-all" then
+	if operation != "list-all" then
+		lval = metaLib
+	else
+		lval = null
+	end if 
+	
+	for data in iterate_exploits(lval, null)
+		print(data[2] + " for " + data[0] + ":" + data[1] + " » " + data[4] + "@"+ data[3])
 	end for
 else if operation == "shell" then
 	print("")
-	for data in iterate_exploits()
+	for data in iterate_exploits(metaLib, "shell")
 		if (data[2] == "shell" and data[0] == metaLib.lib_name and data[1] == metaLib.version) then
 			result = metaLib.overflow(data[3], data[4])
 			if not result then
@@ -75,4 +98,19 @@ else if operation == "shell" then
 			result.start_terminal()
 		end if
 	end for
+else if operation == "select" then
+	list = iterate_exploits(metaLib, null)
+	i = 0
+	for data in list 
+		print ("[" + i + "] " + data[2] + " for " + data[0] + ":" + data[1] + " » " + data[4] + "@"+ data[3])
+		i = i + 1
+	end for
+	selected = user_input("Option: ").to_int
+	data = list[selected]
+	result = metaLib.overflow(data[3], data[4])
+	print("Got result(" + typeof(result) + "): " + result)
+	if typeof(result) == "shell" then
+		print("")
+		result.start_terminal()
+	end if
 end if
